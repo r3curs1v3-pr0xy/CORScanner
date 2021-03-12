@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 import json
 import sys
 import argparse
@@ -64,12 +62,6 @@ def parse_args():
         nargs='?',
         default=False)
     parser.add_argument('-d', '--headers', help='Add headers to the request.', default=None, nargs='*')
-    parser.add_argument(
-        '-T',
-        '--timeout',
-        help='Set requests timeout (default 5 sec)',
-        type=int,
-        default=5)
     args = parser.parse_args()
     if not (args.url or args.input):
         parser.error("No url inputed, please add -u or -i option")
@@ -79,8 +71,7 @@ def parse_args():
 # Synchronize results
 c = threading.Condition()
 
-def scan(cfg):
-    log = cfg["logger"]
+def scan(cfg, log):
     global results
 
     while not cfg["queue"].empty():
@@ -98,25 +89,6 @@ def scan(cfg):
             print(e)
             break
 
-""" 
-CORScanner library API interface for other projects to use. This will check 
-the CORS policy for a given URL. Example Usage:
-
->>> from CORScanner.cors_scan import cors_check
->>> ret = cors_check("https://www.instagram.com", None)
->>> ret
-{'url': 'https://www.instagram.com', 'type': 'reflect_origin',...}
-
-"""
-def cors_check(url, headers=None):
-    # 0: 'DEBUG', 1: 'INFO', 2: 'WARNING', 3: 'ALERT', 4: 'disable log'
-    log = Log(None, print_level=4)
-    cfg = {"logger": log, "headers": header, "timeout": 5}
-
-    cors_check = CORSCheck(url, cfg)
-    #msg = cors_check.check_all_in_parallel()
-    msg = cors_check.check_one_by_one()
-    return msg
 
 def main():
     init()
@@ -127,12 +99,12 @@ def main():
     log_level = 1 if args.verbose else 2  # 1: INFO, 2: WARNING
 
     log = Log(args.output, log_level)
-    cfg = {"logger": log, "queue": queue, "headers": parse_headers(args.headers), "timeout": args.timeout}
+    cfg = {"logger": log, "queue": queue, "headers": parse_headers(args.headers)}
 
     read_urls(args.url, args.input, queue)
 
     print("Starting CORS scan...")
-    threads = [gevent.spawn(scan, cfg) for i in range(args.threads)]
+    threads = [gevent.spawn(scan, cfg, log) for i in range(args.threads)]
 
     try:
         gevent.joinall(threads)

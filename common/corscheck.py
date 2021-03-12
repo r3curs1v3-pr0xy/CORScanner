@@ -12,21 +12,16 @@ except Exception as e:
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-from threading import Thread
-
 class CORSCheck:
     """docstring for CORSCheck"""
     url = None
     cfg = None
     headers = None
-    timeout = None
     result = {}
 
     def __init__(self, url, cfg):
         self.url = url
         self.cfg = cfg
-        self.timeout = cfg["timeout"]
-        self.all_results = []
         if cfg["headers"] != None:
             self.headers = cfg["headers"]
         
@@ -45,7 +40,7 @@ class CORSCheck:
                 headers.update(self.headers)
 
             # self-signed cert OK, follow redirections
-            resp = requests.get(self.url, timeout=self.timeout, headers=headers, verify=False, allow_redirects=True)
+            resp = requests.get(self.url, timeout=5, headers=headers, verify=False, allow_redirects=True)
 
             # remove cross-domain redirections, which may cause false results
             first_domain =tldextract.extract(url).registered_domain
@@ -74,15 +69,12 @@ class CORSCheck:
             return None
         
         parsed = urlparse(str(resp_headers.get("access-control-allow-origin")))
-        if test_origin != "null":
-            resp_origin = parsed.scheme + "://" + parsed.netloc.split(':')[0]
-        else:
-            resp_origin = str(resp_headers.get("access-control-allow-origin"))
+        resp_origin = parsed.scheme + "://" + parsed.netloc.split(':')[0]
 
         msg = None
 
         # test_origin does not have to be case sensitive
-        if test_origin.lower() == resp_origin.lower():
+        if test_origin.lower() == resp_origin:
             credentials = "false"
 
             if resp_headers.get("access-control-allow-credentials") == "true":
@@ -104,7 +96,6 @@ class CORSCheck:
         if msg != None:
             self.cfg["logger"].warning(msg)
             self.result = msg
-            self.all_results.append(msg)
             return True
 
         self.cfg["logger"].info("nothing found for {url: %s, origin: %s, type: %s}" % (test_url, test_origin, test_module_name))
@@ -277,29 +268,3 @@ class CORSCheck:
             if(func()): break 
 
         return self.result
-
-    def check_all_in_parallel(self):
-        functions = [
-            'test_reflect_origin',
-            'test_prefix_match',
-            'test_suffix_match',
-            'test_trust_null',
-            'test_include_match',
-            'test_not_escape_dot',
-            'test_custom_third_parties',
-            'test_special_characters_bypass',
-            'test_trust_any_subdomain',
-            'test_https_trust_http',
-        ]
-
-        threads = []
-        for fname in functions:
-            func = getattr(self,fname)
-            t = Thread(target=func)
-            t.start()
-            threads.append(t)
-
-        for t in threads:
-            t.join()
-
-        return self.all_results
